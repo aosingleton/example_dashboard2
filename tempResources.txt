@@ -1,7 +1,0 @@
-
-asingleton@digitalageexperts.com
-i-03e075a31e1164c8e
-us-east-1
-astempbucketfordashboardfirst
-arn:aws:lambda:us-east-1:976786300661:function:KevinTestFunction
-arn:aws:sns:us-east-1:976786300661:astemptopic
