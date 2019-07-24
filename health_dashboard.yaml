@@ -1,0 +1,356 @@
+# remove defaults in prod
+---
+Parameters:
+  EC2ToMonitorFirst:
+    Description: Desired id for EC2 instance to monitor (e.g. i-08ef2f5fda909).
+    Type: AWS::EC2::Instance::Id
+  EC2ToMonitorFirstRegion:
+    Description: Desired region EC2 instance region (e.g. us-east-1d).
+    Type: String
+    Default: us-east-1
+  S3ToMonitorFirst:
+    Description: Desired name for S3 bucket to monitor.  The bucket name can be between 3 and 63 characters long, and can contain only lower-case characters, numbers, periods, and dashes.  Additionally, each name must 1) start with a lowercase letter or number; 2) cannot contain underscores, end with a dash, have consecutive periods, 3) use dashes adjacent to periods (e.g. tempprojectbucket1234).
+    Type: String
+  LambdaToMonitorFirst:
+    Description: Desired arn for Lambda function monitor (e.g. arn:aws:lambda:us-east-1:487945328789:function:SomeFunctionName).
+    Type: String 
+  SNSToMonitorFirst:
+    Description: Desired arn for SNS topic to monitor (e.g. arn:aws:sns:us-east-1:45615287:SomeTopicName).
+    Type: String
+  NotificationEmailAddress:
+    Description: Desired email to receive health check notifications.
+    Type: String
+
+
+Resources:
+  CPUUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: CPUAlarm
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      # if name value is specified CF pulls in default metric metadata
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Period: 300
+      Threshold: 20
+      Unit: Seconds
+      Statistic: Average
+  
+  ThoriumHealthCheckTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ProjectThoriumHealthCheckCPU
+      TopicName: PROJECTTHORIUMHEALTHCHECKCPU
+      Subscription:
+        - Endpoint: !Ref NotificationEmailAddress
+          Protocol: EMAIL
+
+  ThoriumDashboardDemo:
+    Type: AWS::CloudWatch::Dashboard
+    DependsOn: 
+      - CPUUtilizationAlarm
+    Properties: 
+      DashboardName: Thorium_Health_ChecksDemo
+      DashboardBody: !Sub
+        - '{
+            "widgets": [
+                {
+                  "type": "metric",
+                  "x": 0,
+                  "y": 3,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "metrics": [
+                          [ "AWS/EC2", "CPUUtilization", "InstanceId", "${EC2ToMonitorFirst}" ]
+                      ],
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "legend": {
+                          "position": "right"
+                      },
+                      "title": "Server CPU Utilization "
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 9,
+                  "width": 6,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/EC2", "StatusCheckFailed_Instance", "InstanceId", "${EC2ToMonitorFirst}", { "period": 900 } ]
+                      ],
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "title": "Server Failure Check "
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 21,
+                  "width": 6,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/S3", "NumberOfObjects", "StorageType", "AllStorageTypes", "BucketName", "S3ToMonitorFirst", { "period": 3600 } ]
+                      ],
+                      "view": "timeSeries",
+                      "stacked": true,
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "legend": {
+                          "position": "hidden"
+                      },
+                      "title": "Bucket Items Total "
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 18,
+                  "y": 21,
+                  "width": 6,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/S3", "BytesUploaded", "BucketName", "S3ToMonitorFirst", "FilterId", "EntireBucket", { "period": 900 } ]
+                      ],
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "title": "Bucket Uploaded Bytes Total ",
+                      "legend": {
+                          "position": "hidden"
+                      }
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 18,
+                  "width": 12,
+                  "height": 3,
+                  "properties": {
+                      "view": "singleValue",
+                      "metrics": [
+                          [ "AWS/S3", "4xxErrors", "BucketName", "S3ToMonitorFirst", "FilterId", "EntireBucket" ],
+                          [ ".", "5xxErrors", ".", ".", ".", "." ]
+                      ],
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "title": "Bucket Connection Errors (4xx & 5xx)"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 15,
+                  "width": 12,
+                  "height": 3,
+                  "properties": {
+                      "view": "singleValue",
+                      "metrics": [
+                          [ "AWS/S3", "AllRequests", "BucketName", "S3ToMonitorFirst", "FilterId", "EntireBucket" ],
+                          [ ".", "DeleteRequests", ".", ".", ".", "." ],
+                          [ ".", "PutRequests", ".", ".", ".", "." ]
+                      ],
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "title": "Bucket Request Type Totals"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 18,
+                  "y": 9,
+                  "width": 6,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/EC2", "StatusCheckFailed_Instance", "InstanceId", "${EC2ToMonitorFirst}", { "visible": false, "period": 900 } ],
+                          [ ".", "StatusCheckFailed", ".", ".", { "period": 900 } ]
+                      ],
+                      "view": "timeSeries",
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "stacked": true,
+                      "period": 300,
+                      "legend": {
+                          "position": "bottom"
+                      },
+                      "title": "Server Status Check Failed"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 0,
+                  "y": 9,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "metrics": [
+                          [ "CWAgent", "mem_used_percent", "InstanceId", "${EC2ToMonitorFirst}" ]
+                      ],
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "legend": {
+                          "position": "right"
+                      },
+                      "title": "Server Memory Used (Percent)"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 0,
+                  "y": 33,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/Lambda", "Invocations", "FunctionName", "LambdaToMonitorFirst", "Resource", "LambdaToMonitorFirst", { "period": 900 } ],
+                          [ ".", "Errors", ".", ".", ".", ".", { "period": 900 } ]
+                      ],
+                      "view": "timeSeries",
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "stacked": true,
+                      "legend": {
+                          "position": "right"
+                      },
+                      "title": "Lambda Error & Invocation"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 45,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/SNS", "NumberOfNotificationsDelivered", "TopicName", "SNSToMonitorFirst", { "period": 21600 } ],
+                          [ ".", "NumberOfNotificationsFailed", ".", ".", { "period": 21600 } ]
+                      ],
+                      "view": "timeSeries",
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "stacked": true,
+                      "title": "SNS Topic Notifications",
+                      "legend": {
+                          "position": "right"
+                      }
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 12,
+                  "y": 27,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "S3ToMonitorFirst", { "period": 3600 } ]
+                      ],
+                      "view": "timeSeries",
+                      "stacked": true,
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "title": "Bucket Size"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 0,
+                  "y": 45,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "metrics": [
+                          [ "AWS/Lambda", "Throttles", "FunctionName", "LambdaToMonitorFirst", "Resource", "LambdaToMonitorFirst" ]
+                      ],
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "legend": {
+                          "position": "right"
+                      },
+                      "title": "Lambda Requests Throttled "
+                  }
+                },
+                {
+                  "type": "text",
+                  "x": 12,
+                  "y": 3,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "markdown": "\n# Resource: EC2\n## Elastic Compute Cloud \n\n\nMetric| Description\n----|-----\nServer CPU Utilization| Average CPU utilization by percent\nServer Memory Used (Percent) | Average memory use over time\nServer Failure Check | Measure of instance status failures\nServer Status Check Failed| Measure of status checks returning neither successful nor failed\n\n___\n*To learn more about EC2 check AWS [documentation](https://aws.amazon.com/ec2/)*\n"
+                  }
+                },
+                {
+                  "type": "text",
+                  "x": 12,
+                  "y": 33,
+                  "width": 12,
+                  "height": 12,
+                  "properties": {
+                      "markdown": "\n# Resource: Lambda & SNS\n## Lambda & Simple Notification Service (SNS)\n\n__Info__:\n- Lambda - is a serverless compute program that lets you invoke code.\n- SNS - is a highly available, durable, secure, fully managed pub/sub messaging service that enables you trigger actions within the cloud or send updates based on resource activity.\n\n___\n\nMetric| Description\n----|-----\nLambda Error &  Invocation   | Count of lambda invocations and invocation errors\nLambda Duration | Count of failed invocations\nLambda Duraction (Seconds) | Average time to complete lambda request\nLambda Requests Throttled | Count of invocation requests that were throttled due to high volume\nSNS Topic Notifications | Count of successful  or failed message deliveries\n\n___\n\n*To learn more about EC2 check AWS Lambda [documentation](https://aws.amazon.com/lambda/)*\n\n*To learn more about EC2 check AWS SNS [documentation](https://aws.amazon.com/sns/)*\n"
+                  }
+                },
+                {
+                  "type": "text",
+                  "x": 0,
+                  "y": 15,
+                  "width": 12,
+                  "height": 18,
+                  "properties": {
+                      "markdown": "\n# Resource: S3\n## Amazon Simple Storage Service (S3)\n\n__Info__:\n\nS3 - is a information storage service that offers scalability and tracking for project data.\n___\n\nMetric | Description\n----|-----\nBucket Request Types Totals | Count of various HTTP requests types \nBucket Connection Errors (4xx & 5xx) | Count of 4xx and 5xx status codes\nBucket Items Total | Total number of objects stored in a bucket\nBucket Uploaded Bytes Total | Cumulative sum of bytes uploaded to bucket\nBucket Size (Bytes) | Size of bucket measured in bytes\n\n___\n\n*To learn more about EC2 check AWS [documentation](https://aws.amazon.com/s3/)*\n"
+                  }
+                },
+                {
+                  "type": "text",
+                  "x": 0,
+                  "y": 0,
+                  "width": 24,
+                  "height": 3,
+                  "properties": {
+                      "markdown": "\n# Thorium Health Dashboard\n#### This dashboard is designed to measure cloud resources and associated activity.  Included metrics are designed to give a snapshot of the health and activity of critical resources.\n\nTo learn more about AWS cloud metrics check their [documentation](https://aws.amazon.com/cloudwatch/).\n___\n"
+                  }
+                },
+                {
+                  "type": "metric",
+                  "x": 0,
+                  "y": 39,
+                  "width": 12,
+                  "height": 6,
+                  "properties": {
+                      "metrics": [
+                          [ "AWS/Lambda", "Duration", "FunctionName", "astempdashboardtest072219", { "period": 900 } ]
+                      ],
+                      "view": "timeSeries",
+                      "stacked": false,
+                      "region": "${EC2ToMonitorFirstRegion}",
+                      "period": 300,
+                      "title": "Lambda Duration (Seconds)"
+                  }
+              }
+            ]
+        }'
+        - { EC2ToMonitorFirst : !Ref EC2ToMonitorFirst, EC2ToMonitorFirstRegion : !Ref EC2ToMonitorFirstRegion, S3ToMonitorFirst : !Ref S3ToMonitorFirst, LambdaToMonitorFirst : !Ref LambdaToMonitorFirst, SNSToMonitorFirst : !Ref SNSToMonitorFirst }
+
+
+Outputs:
+  ThoriumDashboardOutputDemo:
+    Description:  Dashboard output value.
+    Value: !Ref ThoriumDashboardDemo
+    Export:
+      Name: ThoriumDashboardIDDemo
